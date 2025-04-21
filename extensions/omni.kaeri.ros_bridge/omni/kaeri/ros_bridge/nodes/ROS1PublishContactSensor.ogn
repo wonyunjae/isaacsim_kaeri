@@ -1,0 +1,68 @@
+{
+    "ROS1PublishContactSensor": {
+        "version": 1,
+        "description": "Accept in_contact(bool) and value(double), and publish contact ros msg",
+        "language": "Python",
+        "metadata": {
+            "uiName": "ROS1 Publish Contact Sensor"
+        },
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "execIn",
+                "metadata": {
+                    "uiName": "execIn"
+                },
+                "default": 0
+            },
+            "nodeNamespace": {
+                "type": "string",
+                "description": "nodeNamespace",
+                "metadata": {
+                    "uiName": "nodeNamespace"
+                },
+                "default": ""
+            },
+            "topicName": {
+                "type": "string",
+                "description": "topicName",
+                "default": "",
+                "metadata": {
+                    "uiName": "topicName"
+                }
+            },
+            "queueSize": {
+                "type": "uint64",
+                "description": "queueSize",
+                "default": 0,
+                "metadata": {
+                    "uiName": "queueSize"
+                }
+            },
+            "timeStamp": {
+                "type": "double",
+                "description": "timeStamp",
+                "default": 0,
+                "metadata": {
+                    "uiName": "timeStamp"
+                }
+            },
+            "inContact": {
+                "type": "bool",
+                "description": "inContact",
+                "metadata": {
+                    "uiName": "inContact"
+                },
+                "default": false
+            },
+            "value": {
+                "type": "double",
+                "description": "contact force value",
+                "default": 0,
+                "metadata": {
+                    "uiName": "value"
+                }
+            }
+        }
+    }
+}

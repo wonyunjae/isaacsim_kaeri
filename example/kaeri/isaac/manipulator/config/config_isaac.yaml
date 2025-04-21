@@ -1,0 +1,54 @@
+# simulation frequency
+control_freq : 300 # 0.05 sec
+physics_freq : 300 # 0.025 sec
+render_freq  : 10 # physics_freq / 16
+
+omnigraph :
+  ros_clock_publisher:
+    enable : true
+    topic  : clock
+    freq   : 50
+
+  ros_joints_tf_publisher :
+    enable : true
+    topic  : tf
+    freq   : 50
+
+  ros_sensors_tf_publisher : # not used
+    enable : false
+    topic  : tf
+    freq   : 50
+
+  ros_imu_publisher :
+    enable : true
+    topic  : imu
+    freq   : 50
+
+  ros_odom_publisher :
+    enable : false
+    topic  : odom_sim
+    freq   : 10
+
+  ros_joint_state_publisher :
+    enable : true
+    topic  : joint_states
+    freq   : 50
+
+  ros_foot_contact_publisher :
+    enable : true
+    topic  : foot_contact
+    freq   : 50
+
+  ros_d455_publisher :
+    enable : true
+    topic  : 
+      camera_info : camera_info
+      depth       : depth
+      depth_pcl   : depth_pcl
+      rgb : rgb
+    freq   : 10
+
+  ros_lidar_publisher :
+    enable : true
+    topic  : point_cloud
+    freq   : 10

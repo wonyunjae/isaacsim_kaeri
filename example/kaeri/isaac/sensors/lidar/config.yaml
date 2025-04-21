@@ -1,0 +1,10 @@
+# simulation frequency
+control_freq : 100 
+physics_freq : 300 
+render_freq  : 20 
+
+omnigraph :
+  ros_lidar_publisher :
+    enable : true
+    topic  : point_cloud
+    freq   : 10 # render_freq의 약수여야 함

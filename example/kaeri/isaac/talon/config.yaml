@@ -1,0 +1,4 @@
+# simulation frequency
+control_freq : 150 # 0.05 sec
+physics_freq : 60 # 0.025 sec
+render_freq  : 60 # physics_freq / 16

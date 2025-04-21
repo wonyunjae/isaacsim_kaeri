@@ -1,0 +1,14 @@
+# simulation frequency
+control_freq : 100 
+physics_freq : 300 
+render_freq  : 20 
+
+omnigraph :
+  ros_d455_publisher :
+    enable : true
+    topic  : 
+      camera_info : camera_info
+      depth       : depth
+      depth_pcl   : depth_pcl
+      rgb : rgb
+    freq   : 10

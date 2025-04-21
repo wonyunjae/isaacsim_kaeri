@@ -1,0 +1,45 @@
+[core]
+reloadable = true
+order = 0
+
+[package]
+version = "1.0.0"
+category = "Simulation"
+title = "Kaeri Test"
+description = ""
+authors = ["NVIDIA"]
+repository = ""
+keywords = []
+changelog = "docs/CHANGELOG.md"
+readme = "docs/README.md"
+preview_image = "data/preview.png"
+icon = "data/icon.png"
+
+
+[dependencies]
+"omni.kit.uiapp" = {}
+"omni.physx" = {}
+"omni.isaac.ui" = {}
+"omni.isaac.core" = {}
+"omni.physx" = {}
+"omni.isaac.dynamic_control" = {}
+"omni.graph.action" = {}
+"omni.graph.nodes" = {}
+"omni.graph.core" = {}
+"omni.isaac.cortex" = {}
+"omni.isaac.cortex.sample_behaviors" = {}
+
+[[python.module]]
+name = "Kaeri_Test_python.go1_mainRL"
+
+[[python.module]]
+name = "Kaeri_Test_python.armstrong"
+
+[[python.module]]
+name = "Kaeri_Test_python.integ_go1_armstrong"
+
+[[python.module]]
+name = "Kaeri_Test_python.talon"
+
+[[python.module]]
+name = "Kaeri_Test_python.rover"

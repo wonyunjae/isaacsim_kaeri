@@ -1,0 +1,10 @@
+# simulation frequency
+control_freq : 200 
+physics_freq : 200
+render_freq  : 10 # physics_freq / 16
+
+omnigraph : 
+  ros_clock_publisher:
+    enable : true
+    topic  : clock
+    freq   : 200
