@@ -2,8 +2,17 @@
 import os
 import sys
 # 직접 지정해줘야 함.
-PACKAGE_PATH = os.environ["PACKAGE_PATH"] = "/isaac-sim/isaac_sim"
-sys.path.append("/isaac-sim")
+PACKAGE_PATH = os.environ["PACKAGE_PATH"] = "/home/smarthc/isaacsim/isaac_sim"
+sys.path.append("/home/smarthc")
+sys.path.insert(0, "/home/smarthc/isaacsim/exts/isaacsim.ros2.bridge/humble")
+
+
+# ROS1 브릿지 로드 방지를 위한 환경 변수 설정
+os.environ["LD_LIBRARY_PATH"] = os.environ.get("LD_LIBRARY_PATH", "") + ":/home/smarthc/isaacsim/exts/isaacsim.ros2.bridge/humble/lib"
+os.environ["DISABLE_ROS1_BRIDGE"] = "1"
+os.environ["ROS_DISTRO"] = "humble"
+os.environ["ENABLE_ROS2_BRIDGE"] = "1"
+os.environ["RMW_IMPLEMENTATION"] = "rmw_cyclonedds_cpp"
 
 import carb
 import numpy as np
@@ -16,19 +25,23 @@ from isaacsim.core.utils.stage import add_reference_to_stage
 from pxr import Gf, UsdGeom
 
 # enable ROS bridge extension
-enable_extension("isaacsim.ros1.bridge")
-enable_extension("omni.kaeri.ros_bridge")
+enable_extension("isaacsim.ros2.bridge")
+# 존재하지 않는 확장 모듈 호출 제거
+# enable_extension("omni.kaeri.ros_bridge")
 
-# ROS
-import rosgraph
+# Try to enable ROS2 bridge
+try:
+    enable_extension("isaacsim.ros2.bridge")
+    if "simulation_app" in globals():
+        simulation_app.update()
+    carb.log_info("ROS2 bridge enabled successfully.")
+except Exception as e:
+    carb.log_warn(f"Failed to enable ROS2 bridge: {e}")
 
-if not rosgraph.is_master_online():
-    carb.log_error("Please run roscore before executing this script")
-    # simulation_app.close()
-    exit()
-
-import rospy
-# from std_msgs.msg import Float32MultiArray
+import rclpy
+# from isaacsim.ros2.bridge.humble.rclpy.parameter import Parameter
+from rclpy.parameter import Parameter
+from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Twist
 import yaml
 
@@ -66,17 +79,18 @@ class Main(BaseSample):
 
         return
 
-    def setup_scene(self):
-        if not rospy.core.is_initialized():
-            rospy.init_node("isaac", anonymous=False, disable_signals=True, log_level=rospy.ERROR)
-        rospy.set_param("use_sim_time", True)
-        
+def setup_scene(self):
+    if not rclpy.ok():  # 4칸 들여쓰기(표준)
+        rclpy.init()    # 8칸 들여쓰기
+        self.node = rclpy.create_node("talon_sim")  # 노드 생성 추가
+        self.node.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
+    
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [environment] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         asset_path = PACKAGE_PATH + "/model/environment/Warehouse.usd"
         add_reference_to_stage(usd_path=asset_path, prim_path="/World/Warehouse")
 
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [robot] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-        usd_path = "/isaac-sim/isaac_sim/model/talon/TALON_v1123.usd"
+        usd_path = PACKAGE_PATH + "/model/talon/TALON_v1123.usd"
         add_reference_to_stage(usd_path=usd_path, prim_path="/World/Robot")
 
         # robot prim
@@ -85,8 +99,8 @@ class Main(BaseSample):
         self.talon_transform = xform.AddTransformOp()
 
         # Set the new location & rotation
-        new_location = Gf.Vec3d(0.0, 0.0, 0.7)  # Replace with your desired location    # 기존 : 0.65
-        new_rotation = Gf.Rotation(Gf.Vec3d(0, 0, 1), 0)  # Replace with your desired rotation
+        new_location = Gf.Vec3d(0.0, 0.0, 0.7)
+        new_rotation = Gf.Rotation(Gf.Vec3d(0, 0, 1), 0)
 
         # Create a new transform
         mat4d = Gf.Matrix4d()
@@ -95,8 +109,8 @@ class Main(BaseSample):
 
         # Apply the new transform
         self.talon_transform.Set(mat4d)
-        
-        return
+    
+    return  # 함수와 같은 레벨의 들여쓰기
 
     async def setup_pre_reset(self):
         # # Set the new location & rotation

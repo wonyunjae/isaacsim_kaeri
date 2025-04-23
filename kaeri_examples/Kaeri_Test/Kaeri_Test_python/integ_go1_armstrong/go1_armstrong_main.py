@@ -1,12 +1,67 @@
 import os
 import sys
-
-# 환경 변수 지정해줘야 함.
-PACKAGE_PATH = os.environ["PACKAGE_PATH"] = "/isaac-sim/isaac_sim"
-sys.path.append("/isaac-sim")
-
 import argparse
-from isaac_sim.example.kaeri.isaac.quadruped.go1_with_sensors import cli_args
+sys.path.insert(0, "/home/smarthc/isaacsim/IsaacLab/scripts")
+from reinforcement_learning.rsl_rl import cli_args
+import carb
+import numpy as np
+import omni.appwindow  # Contains handle to keyboard
+from pxr import Gf, UsdGeom, UsdPhysics
+from isaacsim.core.utils.rotations import euler_angles_to_quat
+from isaacsim.core.utils.stage import add_reference_to_stage
+from isaacsim.core.utils.prims import create_prim 
+# from omni.isaac.quadruped.robots import Unitree
+from isaacsim.asset.importer.urdf import _urdf
+from isaacsim.core.utils.extensions import get_extension_path_from_name
+import omni.graph.core as og
+from isaacsim.core.utils.extensions import enable_extension
+# [orbit]
+import gymnasium as gym
+import torch
+import traceback
+from isaacsim.core.api.robots import Robot
+import yaml
+
+import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
+from isaaclab_rl.rsl_rl import (
+    RslRlOnPolicyRunnerCfg,
+    RslRlVecEnvWrapper,
+    export_policy_as_onnx
+)
+
+import rclpy
+from rclpy.node import Node
+import tf2_ros
+# from tf.transformations import quaternion_from_euler
+from geometry_msgs.msg import TransformStamped
+from scipy.spatial.transform import Rotation as R
+from tf2_ros.transform_broadcaster import TransformBroadcaster
+from geometry_msgs.msg import Twist
+from rclpy.parameter import Parameter
+
+# [Custom]
+from isaaclab_assets.robots.unitree import UNITREE_GO1_CFG  # Go1용
+from isaaclab.assets import Articulation 
+from rsl_rl.runners.on_policy_runner import OnPolicyRunner
+# from isaaclab.bridges.ros import RosPublisher 
+# from isaac_sim.example.kaeri.isaac.integ_go1_armstrong.ros_publisher_go1 import *
+# from isaac_sim.example.kaeri.isaac.integ_go1_armstrong.ros_publisher_armstrong import *
+from scipy.spatial.transform import Rotation
+from isaacsim.core.api.world import World
+from Kaeri_Test_python.kaeri_base_sample import BaseSample
+
+PACKAGE_PATH = os.environ["PACKAGE_PATH"] = "/home/smarthc/isaacsim/isaac_sim"
+# 환경 변수 지정해줘야 함.
+sys.path.append("/home/smarthc/isaacsim/exts/isaacsim.ros2.bridge/humble")
+# ROS1 브릿지 로드 방지를 위한 환경 변수 설정
+os.environ["LD_LIBRARY_PATH"] = os.environ.get("LD_LIBRARY_PATH", "") + ":/home/smarthc/isaacsim/exts/isaacsim.ros2.bridge/humble/lib"
+os.environ["DISABLE_ROS1_BRIDGE"] = "1"
+os.environ["ROS_DISTRO"] = "humble"
+os.environ["ENABLE_ROS2_BRIDGE"] = "1"
+os.environ["RMW_IMPLEMENTATION"] = "rmw_cyclonedds_cpp"
+
+
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
@@ -22,60 +77,24 @@ cli_args.add_rsl_rl_args(parser)
 # args_cli = parser.parse_args()
 args_cli, unknown = parser.parse_known_args()
 
-import carb
-import numpy as np
-import omni.appwindow  # Contains handle to keyboard
-from pxr import Gf, UsdGeom, UsdPhysics
-from isaacsim.core.utils.rotations import euler_angles_to_quat
-from isaacsim.core.utils.stage import add_reference_to_stage
-from isaacsim.core.utils.prims import create_prim 
-# from omni.isaac.quadruped.robots import Unitree
-from isaacsim.asset.importer.urdf import _urdf
-from isaacsim.core.utils.extensions import get_extension_path_from_name
-import omni.graph.core as og
-from isaacsim.core.utils.extensions import enable_extension
+# enable ROS bridge extension
+enable_extension("isaacsim.ros2.bridge")
 
-from isaacsim.core.api.robots import Robot
-import yaml
+# Try to enable ROS2 bridge
+try:
+    enable_extension("isaacsim.ros2.bridge")
+    if "simulation_app" in globals():
+        simulation_app.update()
+except Exception as e:
+    carb.log_warn(f"Failed to enable ROS2 bridge: {e}") 
 
-# [orbit]
-import gymnasium as gym
-import torch
-import traceback
+# quaternion_from_euler 대체 함수
+def quaternion_from_euler(roll, pitch, yaw):
+    r = Rotation.from_euler('xyz', [roll, pitch, yaw])
+    quat = r.as_quat()  # [x, y, z, w] 순서
+    # ROS 메시지에 맞게 재배열: [w, x, y, z] => [x, y, z, w]
+    return [quat[0], quat[1], quat[2], quat[3]]
 
-import isaaclab_tasks  # noqa: F401
-from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
-from isaaclab_rl.rsl_rl import (
-    RslRlOnPolicyRunnerCfg,
-    RslRlVecEnvWrapper,
-    export_policy_as_onnx
-)
-# enable ROS bridge extensions
-enable_extension("isaacsim.ros1.bridge")
-enable_extension("omni.kaeri.ros_bridge")
-
-# [ROS]
-import rosgraph
-
-if not rosgraph.is_master_online():
-    carb.log_error("Please run roscore before executing this script")
-    # simulation_app.close()
-    exit()
-
-import rospy
-import tf
-from geometry_msgs.msg import Twist
-
-# [Custom]
-from isaaclab_assets.robots.unitree import UNITREE_GO1_CFG  # Go1용
-from isaaclab.assets import Articulation 
-from rsl_rl.runners.on_policy_runner import OnPolicyRunner
-# from isaaclab.bridges.ros import RosPublisher 
-from isaac_sim.example.kaeri.isaac.integ_go1_armstrong.ros_publisher_go1 import *
-from isaac_sim.example.kaeri.isaac.integ_go1_armstrong.ros_publisher_armstrong import *
-
-from isaacsim.core.api.world import World
-from Kaeri_Test_python.kaeri_base_sample import BaseSample
 
 # Custom bridge implementation to provide the necessary functionality
 class RslRlBridge:
@@ -137,12 +156,12 @@ class Main(BaseSample):
         return  
 
     def setup_scene(self):
-        if not rospy.core.is_initialized():
-            rospy.init_node("isaac", anonymous=False, disable_signals=True, log_level=rospy.ERROR)
-        rospy.set_param("use_sim_time", True)
+        if not rclpy.core.is_initialized():
+            rclpy.init_node("isaac", anonymous=False, disable_signals=True, log_level=rclpy.ERROR)
+        node.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [subscriber] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-        rospy.Subscriber("/go1/cmd_vel", Twist, self.cmd_vel_go1_cb)
-        rospy.Subscriber("/armstrong/cmd_vel", Twist, self.cmd_vel_armstrong_cb)
+        rclpy.Subscriber("/go1/cmd_vel", Twist, self.cmd_vel_go1_cb)
+        rclpy.Subscriber("/armstrong/cmd_vel", Twist, self.cmd_vel_armstrong_cb)
 
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [world] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         self._world = self.get_world()
@@ -246,15 +265,15 @@ class Main(BaseSample):
 
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [publisher] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         # tf broadcaster
-        self._tf_trunk_to_d455_front = tf.TransformBroadcaster()
-        self._tf_trunk_to_d455_rear = tf.TransformBroadcaster()
-        self._tf_trunk_to_d455_left = tf.TransformBroadcaster()
-        self._tf_trunk_to_d455_right = tf.TransformBroadcaster()
-        self._tf_base_link_to_trunk = tf.TransformBroadcaster()
+        self._tf_trunk_to_d455_front = tf2_ros.TransformBroadcaster()
+        self._tf_trunk_to_d455_rear = tf2_ros.TransformBroadcaster()
+        self._tf_trunk_to_d455_left = tf2_ros.TransformBroadcaster()
+        self._tf_trunk_to_d455_right = tf2_ros.TransformBroadcaster()
+        self._tf_base_link_to_trunk = tf2_ros.TransformBroadcaster()
 
         # tf broadcaster - armstrong
-        self._tf_trunk_to_d455_front_armstrong = tf.TransformBroadcaster()
-        self._tf_base_link_to_armstrong = tf.TransformBroadcaster()
+        self._tf_trunk_to_d455_front_armstrong = tf2_ros.TransformBroadcaster()
+        self._tf_base_link_to_armstrong = tf2_ros.TransformBroadcaster()
 
         return
 
@@ -345,18 +364,18 @@ class Main(BaseSample):
             og.Controller.evaluate_sync(self._joint_tf_graph)
 
             # ros clock time
-            time = rospy.Time.now()
+            time = rclpy.time.Time.now()
             
             # [-120, 0, -90] to quaternion
-            self._tf_trunk_to_d455_front.sendTransform((0, 0, 0), tf.transformations.quaternion_from_euler(-1.5708, 0, 1.5708), rospy.Time.now(), "go1/d455_front", "go1/RSD455")
+            self._tf_trunk_to_d455_front.sendTransform((0, 0, 0), quaternion_from_euler(-1.5708, 0, 1.5708), rclpy.time.Time.now(), "go1/d455_front", "go1/RSD455")
             # [-120, 0.0, 90] to quaternion
-            self._tf_trunk_to_d455_rear.sendTransform((0, 0.0, 0), tf.transformations.quaternion_from_euler(-1.5708, 0, 1.5708), rospy.Time.now(), "go1/d455_rear", "go1/World_Sensors_Realsense_D455_2_RSD455")
+            self._tf_trunk_to_d455_rear.sendTransform((0, 0.0, 0), quaternion_from_euler(-1.5708, 0, 1.5708), rclpy.time.Time.now(), "go1/d455_rear", "go1/World_Sensors_Realsense_D455_2_RSD455")
             # [-120, 0, 0] to quaternion
-            self._tf_trunk_to_d455_left.sendTransform((0, 0, 0), tf.transformations.quaternion_from_euler(-1.5708, 0, 1.5708), rospy.Time.now(), "go1/d455_left", "go1/World_Sensors_Realsense_D455_3_RSD455")
+            self._tf_trunk_to_d455_left.sendTransform((0, 0, 0), quaternion_from_euler(-1.5708, 0, 1.5708), rclpy.time.Time.now(), "go1/d455_left", "go1/World_Sensors_Realsense_D455_3_RSD455")
             # [-120, 0.0, 180] to quaternion
-            self._tf_trunk_to_d455_right.sendTransform((0, 0, 0), tf.transformations.quaternion_from_euler(-1.5708, 0, 1.5708), rospy.Time.now(), "go1/d455_right", "go1/World_Sensors_Realsense_D455_4_RSD455")
+            self._tf_trunk_to_d455_right.sendTransform((0, 0, 0), quaternion_from_euler(-1.5708, 0, 1.5708), rclpy.time.Time.now(), "go1/d455_right", "go1/World_Sensors_Realsense_D455_4_RSD455")
             # broadcast tf from base_link to trunk
-            self._tf_base_link_to_trunk.sendTransform((0, 0, 0), tf.transformations.quaternion_from_euler(0, 0, 0), rospy.Time.now(), "go1/trunk", "go1/base_link")
+            self._tf_base_link_to_trunk.sendTransform((0, 0, 0), quaternion_from_euler(0, 0, 0), rclpy.time.Time.now(), "go1/trunk", "go1/base_link")
             self._tf_publisher_iter = 0
         else:
             self._tf_publisher_iter += self.cfg_og_go1["ros_joints_tf_publisher"]["freq"]
@@ -427,9 +446,9 @@ class Main(BaseSample):
             og.Controller.evaluate_sync(self._joint_state_graph_armstrong)
 
             # [-120, 0, -90] to quaternion
-            self._tf_trunk_to_d455_front_armstrong.sendTransform((0, 0, 0), tf.transformations.quaternion_from_euler(-1.5708, 0, 1.5708), rospy.Time.now(), "armstrong/d455_front", "armstrong/RSD455")
+            self._tf_trunk_to_d455_front_armstrong.sendTransform((0, 0, 0), quaternion_from_euler(-1.5708, 0, 1.5708), rclpy.time.Time.now(), "armstrong/d455_front", "armstrong/RSD455")
             
-            self._tf_base_link_to_armstrong.sendTransform((0, 0, 0), tf.transformations.quaternion_from_euler(1.5708, 0, 0), rospy.Time.now(), "armstrong/full_test", "armstrong/base_link")
+            self._tf_base_link_to_armstrong.sendTransform((0, 0, 0), quaternion_from_euler(1.5708, 0, 0), rclpy.time.Time.now(), "armstrong/full_test", "armstrong/base_link")
 
             self._joint_state_publisher_iter_armstrong = 0
         else:

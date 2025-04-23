@@ -128,12 +128,14 @@ def ros2_foot_contact_publisher_go1():
                 ("readContactRL", "omni.isaac.sensor.IsaacReadContactSensor"),
                 ("readContactRR", "omni.isaac.sensor.IsaacReadContactSensor"),
 
-                ("publishContactFL", "omni.kaeri.ros_bridge.ROS2PublishContactSensor"),
-                ("publishContactFR", "omni.kaeri.ros_bridge.ROS2PublishContactSensor"),
-                ("publishContactRL", "omni.kaeri.ros_bridge.ROS2PublishContactSensor"),
-                ("publishContactRR", "omni.kaeri.ros_bridge.ROS2PublishContactSensor"),
+                # ROS2 Bool 메시지 퍼블리셔 사용 - 컨택트 센서용
+                ("publishContactFL", "isaacsim.ros2.bridge.ROS2PublishBool"),
+                ("publishContactFR", "isaacsim.ros2.bridge.ROS2PublishBool"),
+                ("publishContactRL", "isaacsim.ros2.bridge.ROS2PublishBool"),
+                ("publishContactRR", "isaacsim.ros2.bridge.ROS2PublishBool"),
             ],
             keys.CONNECT: [
+                # 기존 연결 유지
                 ("OnTick.outputs:tick", "readContactFL.inputs:execIn"),
                 ("OnTick.outputs:tick", "readContactFR.inputs:execIn"),
                 ("OnTick.outputs:tick", "readContactRL.inputs:execIn"),
@@ -149,29 +151,26 @@ def ros2_foot_contact_publisher_go1():
                 ("readSimTime.outputs:simulationTime", "publishContactRL.inputs:timeStamp"),
                 ("readSimTime.outputs:simulationTime", "publishContactRR.inputs:timeStamp"),
 
-                ("readContactFL.outputs:inContact", "publishContactFL.inputs:inContact"),
-                ("readContactFR.outputs:inContact", "publishContactFR.inputs:inContact"),
-                ("readContactRL.outputs:inContact", "publishContactRL.inputs:inContact"),
-                ("readContactRR.outputs:inContact", "publishContactRR.inputs:inContact"),
-
-                ("readContactFL.outputs:value", "publishContactFL.inputs:value"),
-                ("readContactFR.outputs:value", "publishContactFR.inputs:value"),
-                ("readContactRL.outputs:value", "publishContactRL.inputs:value"),
-                ("readContactRR.outputs:value", "publishContactRR.inputs:value"),
+                # ROS2 Bool 메시지에는 inContact만 연결
+                ("readContactFL.outputs:inContact", "publishContactFL.inputs:data"),
+                ("readContactFR.outputs:inContact", "publishContactFR.inputs:data"),
+                ("readContactRL.outputs:inContact", "publishContactRL.inputs:data"),
+                ("readContactRR.outputs:inContact", "publishContactRR.inputs:data"),
             ],
             keys.SET_VALUES: [
+                # 기존 설정 유지
                 ("readContactFL.inputs:csPrim", "/World/Robot/Go1/FL_foot/sensor"),
                 ("readContactFR.inputs:csPrim", "/World/Robot/Go1/FR_foot/sensor"),
                 ("readContactRL.inputs:csPrim", "/World/Robot/Go1/RL_foot/sensor"),
                 ("readContactRR.inputs:csPrim", "/World/Robot/Go1/RR_foot/sensor"),
 
-                # set nodeNamespace
+                # 네임스페이스 설정
                 ("publishContactFL.inputs:nodeNamespace", "/go1"),
                 ("publishContactFR.inputs:nodeNamespace", "/go1"),
                 ("publishContactRL.inputs:nodeNamespace", "/go1"),
                 ("publishContactRR.inputs:nodeNamespace", "/go1"),
 
-                # set topicName
+                # 토픽명 설정
                 ("publishContactFL.inputs:topicName", "/FL_foot"),
                 ("publishContactFR.inputs:topicName", "/FR_foot"),
                 ("publishContactRL.inputs:topicName", "/RL_foot"),
@@ -220,7 +219,6 @@ def ros2_odom_publisher_go1():
     )
 
     return odom_graph
-
 
 def ros2_imu_publisher_go1():
     keys = og.Controller.Keys

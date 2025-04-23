@@ -9,3 +9,5 @@
 
 from Kaeri_Test_python.kaeri_base_sample.base_sample import BaseSample
 from Kaeri_Test_python.kaeri_base_sample.base_sample_extension import BaseSampleExtension
+import sys
+sys.path.append("/home/smarthc/isaacsim/exts/isaacsim.ros2.bridge/humble")

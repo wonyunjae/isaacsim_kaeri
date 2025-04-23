@@ -1,24 +1,10 @@
 import os
 import sys
-
-# 환경 변수 지정해줘야 함.
-PACKAGE_PATH = os.environ["PACKAGE_PATH"] = "/isaac-sim/isaac_sim"
-sys.path.append("/isaac-sim")
-
 import argparse
-from isaac_sim.example.kaeri.isaac.quadruped.go1_with_sensors import cli_args
-
-# add argparse arguments
-parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
-parser.add_argument("--cpu", action="store_true", default=False, help="Use CPU pipeline.")
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default="Isaac-Velocity-Flat-Unitree-Go1-v0", help="Name of the task.")
-parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
-
-# append RSL-RL cli arguments
-cli_args.add_rsl_rl_args(parser)
-# append AppLauncher cli args
-args_cli, unkown = parser.parse_known_args()
+# isaac_sim.example.kaeri.isaac.quadruped.go1_with_sensors에서 cli_args import를 제거하고
+# IsaacLab의 cli_args를 사용
+sys.path.insert(0, "/home/smarthc/isaacsim/IsaacLab/scripts")
+from reinforcement_learning.rsl_rl import cli_args
 
 import carb
 import numpy as np
@@ -28,13 +14,18 @@ from pxr import Gf, UsdGeom, UsdPhysics
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.core.utils.prims import create_prim
+from isaacsim.core.api.robots import Robot
 # 사용하지 않는 모듈 제거 또는 주석 처리
 from isaacsim.core.utils.extensions import get_extension_path_from_name
 import omni.graph.core as og
-from isaacsim.core.utils.extensions import enable_extension
+
 # 올바른 robot import 경로 수정
-from isaacsim.core.api.robots import Robot
 import yaml
+# import rclpy
+sys.path.insert(0, "/home/smarthc/isaacsim/IsaacLab/source")
+sys.path.insert(0, "/home/smarthc/isaacsim/IsaacLab/source/isaaclab/isaaclab/envs")
+sys.path.insert(0, "/home/smarthc/isaacsim/IsaacLab/source/isaaclab_tasks")
+sys.path.insert(0, "/home/smarthc/.local/lib/python3.10/site-packages")
 
 # [IsaacLab] - Orbit에서 IsaacLab으로 migration
 import gymnasium as gym
@@ -50,27 +41,92 @@ from isaaclab_rl.rsl_rl import (
     export_policy_as_onnx
 )
 
+# ROS1 브릿지 로드 방지를 위한 환경 변수 설정
+os.environ["LD_LIBRARY_PATH"] = os.environ.get("LD_LIBRARY_PATH", "") + ":/home/smarthc/isaacsim/exts/isaacsim.ros2.bridge/humble/lib"
+os.environ["DISABLE_ROS1_BRIDGE"] = "1"
+os.environ["ROS_DISTRO"] = "humble"
+os.environ["ENABLE_ROS2_BRIDGE"] = "1"
+os.environ["RMW_IMPLEMENTATION"] = "rmw_cyclonedds_cpp"
+
+# # 환경 변수 지정해줘야 함.
+PACKAGE_PATH = os.environ["PACKAGE_PATH"] = "/home/smarthc/isaacsim/isaac_sim/"
+# sys.path.append("/isaac-sim")
+sys.path.insert(0, "/home/smarthc/isaacsim/exts/isaacsim.ros2.bridge/humble")
+
+# add argparse arguments
+parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
+parser.add_argument("--cpu", action="store_true", default=False, help="Use CPU pipeline.")
+parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
+parser.add_argument("--task", type=str, default="Isaac-Velocity-Flat-Unitree-Go1-v0", help="Name of the task.")
+parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
+
+# append RSL-RL cli arguments
+cli_args.add_rsl_rl_args(parser)
+# append AppLauncher cli args
+args_cli, unkown = parser.parse_known_args()
+
+
+from isaacsim.core.utils.extensions import enable_extension
+
 # enable ROS bridge extension
-enable_extension("isaacsim.ros1.bridge")
-enable_extension("omni.kaeri.ros_bridge")
+enable_extension("isaacsim.ros2.bridge")
 
-# [ROS]
-import rosgraph
 
-if not rosgraph.is_master_online():
-    carb.log_error("Please run roscore before executing this script")
-    # simulation_app.close()
-    exit()
+# Try to enable ROS2 bridge
+try:
+    enable_extension("isaacsim.ros2.bridge")
+    if "simulation_app" in globals():
+        simulation_app.update()
+    carb.log_info("ROS2 bridge enabled successfully.")
+except Exception as e:
+    carb.log_warn(f"Failed to enable ROS2 bridge: {e}")
 
-import rospy
-import tf
+# Try to import ROS2 packages, but provide fallbacks
+ROS2_AVAILABLE = False
+try:
+    import rclpy
+    from rclpy.node import Node
+    ROS2_AVAILABLE = True
+    carb.log_info("ROS2 Python libraries found. ROS2 functionality enabled.")
+except ImportError:
+    carb.log_warn("ROS2 Python libraries not found. Please install ROS2 for full functionality.")
+    carb.log_warn("Run: /isaac-sim/isaac_sim/kaeri_examples/Kaeri_Test/scripts/install_ros2_in_container.sh")
+
+from rclpy.parameter import Parameter
+
+import transforms3d
+from transforms3d.euler import euler2quat
+
+# 대체 클래스 생성
+class TransformBroadcaster:
+    def __init__(self):
+        self.node = None
+    
+    def sendTransform(self, translation, rotation, time, child_frame, parent_frame):
+        # 로그만 출력하고 실제 기능은 비활성화 (호스트-ROS2와 통신이 필요한 경우만)
+        carb.log_verbose(f"Transform: {parent_frame} -> {child_frame}")
+
+# tf_transformations 모듈을 에뮬레이션하는 클래스 생성
+class TfTransformations:
+    @staticmethod
+    def quaternion_from_euler(roll, pitch, yaw):
+        return euler2quat(roll, pitch, yaw)
+    
+    @staticmethod
+    def TransformBroadcaster():
+        return TransformBroadcaster()
+
+# 원래 import 부분 대체
+# import tf_transformations
+tf_transformations = TfTransformations()
+
 from geometry_msgs.msg import Twist
 
 # [Custom]
-from isaaclab_assets.robots.unitree import UNITREE_GO1_CFG  # Go1용
+# from isaaclab_assets.robots.unitree import UNITREE_GO1_CFG  # Go1용
 from isaaclab.assets import Articulation 
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
-from isaac_sim.example.kaeri.isaac.quadruped.go1_with_sensors.ros_publisher import *
+# from isaac_sim.example.kaeri.isaac.quadruped.go1_with_sensors.ros_publisher import *
 
 from isaacsim.core.api.world import World
 from Kaeri_Test_python.kaeri_base_sample import BaseSample
@@ -100,6 +156,7 @@ class RslRlBridge:
 class MainRL(BaseSample):
     def __init__(self) -> None:
         super().__init__()
+        self.node = None
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [config] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         # load yaml file
         with open(PACKAGE_PATH + "/example/kaeri/isaac/quadruped/go1_with_sensors/config.yaml", "r") as f:
@@ -125,11 +182,20 @@ class MainRL(BaseSample):
         return  
 
     def setup_scene(self):
-        if not rospy.core.is_initialized():
-            rospy.init_node("isaac", anonymous=False, disable_signals=True, log_level=rospy.ERROR)
-        rospy.set_param("use_sim_time", True)
+        # Initialize ROS2 if available, otherwise continue without ROS
+        if ROS2_AVAILABLE:
+            if not rclpy.ok():
+                rclpy.init(args=None)
+            self.node = Node("isaac_sim_go1")
+            carb.log_info("ROS2 initialized successfully")
+        else:
+            carb.log_warn("Running without ROS2 communication")
+        
+        # Continue with scene setup that doesn't depend on ROS
+        if not rclpy.ok():
+            rclpy.init(args=None)
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [subscriber] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-        rospy.Subscriber("/cmd_vel", Twist, self.cmd_vel_cb)
+        self.cmd_vel_subscriber = node.create_subscription(Twist, "/cmd_vel", self.cmd_vel_cb, 10)
 
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [environment] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         asset_path = PACKAGE_PATH + "/model/environment/Warehouse.usd"
@@ -182,11 +248,11 @@ class MainRL(BaseSample):
 
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [publisher] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         # tf broadcaster
-        self._tf_trunk_to_d455_front = tf.TransformBroadcaster()
-        self._tf_trunk_to_d455_rear = tf.TransformBroadcaster()
-        self._tf_trunk_to_d455_left = tf.TransformBroadcaster()
-        self._tf_trunk_to_d455_right = tf.TransformBroadcaster()
-        self._tf_base_link_to_trunk = tf.TransformBroadcaster()
+        self._tf_trunk_to_d455_front = tf_transformations.TransformBroadcaster()
+        self._tf_trunk_to_d455_rear = tf_transformations.TransformBroadcaster()
+        self._tf_trunk_to_d455_left = tf_transformations.TransformBroadcaster()
+        self._tf_trunk_to_d455_right = tf_transformations.TransformBroadcaster()
+        self._tf_base_link_to_trunk = tf_transformations.TransformBroadcaster()
 
         return
 
@@ -206,7 +272,7 @@ class MainRL(BaseSample):
 
     def on_physics_step(self, step_size) -> None:
         # broadcast tf from base_link to trunk
-        self._tf_base_link_to_trunk.sendTransform((0, 0, 0), tf.transformations.quaternion_from_euler(0, 0, 0), rospy.Time.now(), "trunk", "base_link")
+        self._tf_base_link_to_trunk.sendTransform((0, 0, 0), tf_transformations.quaternion_from_euler(0, 0, 0), rclpy.time.Time.now(), "trunk", "base_link")
 
         #print(f"self.physics_freq - self.control_freq = {self._clock_control_iter}")
         if self.physics_freq - self.control_freq == self._clock_control_iter:
@@ -253,16 +319,16 @@ class MainRL(BaseSample):
             og.Controller.evaluate_sync(self._joint_tf_graph)
 
             # ros clock time
-            time = rospy.Time.now()
+            time = rclpy.time.Time.now()
             
             # [-120, 0, -90] to quaternion
-            self._tf_trunk_to_d455_front.sendTransform((0, 0, 0), tf.transformations.quaternion_from_euler(-1.5707, 0, 1.5707), rospy.Time.now(), "d455_front", "RSD455")
+            self._tf_trunk_to_d455_front.sendTransform((0, 0, 0), tf_transformations.quaternion_from_euler(-1.5707, 0, 1.5707), rclpy.time.Time.now(), "d455_front", "RSD455")
             # [-120, 0.0, 90] to quaternion
-            self._tf_trunk_to_d455_rear.sendTransform((0, 0.0, 0), tf.transformations.quaternion_from_euler(-1.5707, 0, 1.5707), rospy.Time.now(), "d455_rear", "World_Sensors_Realsense_D455_2_RSD455")
+            self._tf_trunk_to_d455_rear.sendTransform((0, 0.0, 0), tf_transformations.quaternion_from_euler(-1.5707, 0, 1.5707), rclpy.time.Time.now(), "d455_rear", "World_Sensors_Realsense_D455_2_RSD455")
             # [-120, 0, 0] to quaternion
-            self._tf_trunk_to_d455_left.sendTransform((0, 0, 0), tf.transformations.quaternion_from_euler(-1.5707, 0, 1.5707), rospy.Time.now(), "d455_left", "World_Sensors_Realsense_D455_3_RSD455")
+            self._tf_trunk_to_d455_left.sendTransform((0, 0, 0), tf_transformations.quaternion_from_euler(-1.5707, 0, 1.5707), rclpy.time.Time.now(), "d455_left", "World_Sensors_Realsense_D455_3_RSD455")
             # [-120, 0.0, 180] to quaternion
-            self._tf_trunk_to_d455_right.sendTransform((0, 0, 0), tf.transformations.quaternion_from_euler(-1.5707, 0, 1.5707), rospy.Time.now(), "d455_right", "World_Sensors_Realsense_D455_4_RSD455")
+            self._tf_trunk_to_d455_right.sendTransform((0, 0, 0), tf_transformations.quaternion_from_euler(-1.5707, 0, 1.5707), rclpy.time.Time.now(), "d455_right", "World_Sensors_Realsense_D455_4_RSD455")
 
             self._tf_publisher_iter = 0
         else:
@@ -291,15 +357,7 @@ class MainRL(BaseSample):
             self._imu_publisher_iter = 0
         else:
             self._imu_publisher_iter += self.cfg_og["ros_imu_publisher"]["freq"]
-
-        if self.cfg_og["ros_odom_publisher"]["enable"] == False:
-            pass
-        elif self.physics_freq - self.cfg_og["ros_odom_publisher"]["freq"] == self._odom_publisher_iter:
-            og.Controller.evaluate_sync(self._odom_graph)
-            self._odom_publisher_iter = 0
-        else:
-            self._odom_publisher_iter += self.cfg_og["ros_odom_publisher"]["freq"]
-
+            
         if self.cfg_og["ros_foot_contact_publisher"]["enable"] == False:
             pass
         elif self.physics_freq - self.cfg_og["ros_foot_contact_publisher"]["freq"] == self._foot_force_publisher_iter:
@@ -307,7 +365,7 @@ class MainRL(BaseSample):
             self._foot_force_publisher_iter = 0
         else:
             self._foot_force_publisher_iter += self.cfg_og["ros_foot_contact_publisher"]["freq"]
-        
+
         if self.cfg_og["ros_lidar_publisher"]["enable"] == False:
             pass
         elif self.physics_freq - self.cfg_og["ros_lidar_publisher"]["freq"] == self._lidar_publisher_iter:
@@ -500,5 +558,8 @@ class MainRL(BaseSample):
         return
 
     def world_cleanup(self):
-        
+        # ROS2 노드 종료
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
         return

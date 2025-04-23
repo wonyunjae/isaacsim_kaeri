@@ -2,15 +2,17 @@
 import os
 import sys
 # 직접 지정해줘야 함.
-PACKAGE_PATH = os.environ["PACKAGE_PATH"] = "/isaac-sim/isaac_sim"
-sys.path.append("/isaac-sim")
+sys.path.append("/home/smarthc")
+sys.path.append("/home/smarthc/isaacsim/exts/isaacsim.ros2.bridge/humble")
+
+PACKAGE_PATH = os.environ["PACKAGE_PATH"] = "/home/smarthc/isaacsim/isaac_sim"
 
 # ROS1 브릿지 로드 방지를 위한 환경 변수 설정
+os.environ["LD_LIBRARY_PATH"] = os.environ.get("LD_LIBRARY_PATH", "") + ":/home/smarthc/isaacsim/exts/isaacsim.ros2.bridge/humble/lib"
 os.environ["DISABLE_ROS1_BRIDGE"] = "1"
-
-# ROS2 브릿지 활성화를 위한 설정
+os.environ["ROS_DISTRO"] = "humble"
 os.environ["ENABLE_ROS2_BRIDGE"] = "1"
-os.environ["RMW_IMPLEMENTATION"] = "rmw_cyclonedds_cpp"  # 효율적인 ROS2 미들웨어 선택
+os.environ["RMW_IMPLEMENTATION"] = "rmw_cyclonedds_cpp"
 
 import carb
 import numpy as np
@@ -22,23 +24,13 @@ from isaacsim.core.utils.extensions import enable_extension
 from isaacsim.core.utils.stage import add_reference_to_stage
 from pxr import Gf, UsdGeom
 
-# ROS1 브릿지 대신 ROS2 브릿지 활성화
-from omni.isaac.kit import SimulationApp
-
 # ROS2 브릿지 활성화
 enable_extension("isaacsim.ros2.bridge")
 if "simulation_app" in globals():
     simulation_app.update()
 
-# ROS2로 마이그레이션
-import rclpy
-from rclpy.node import Node
-from geometry_msgs.msg import Twist
-import yaml
-
 # custom scripts
-import numpy as np
-
+import yaml
 from Kaeri_Test_python.kaeri_base_sample import BaseSample
 
 class Main(BaseSample):
@@ -67,17 +59,15 @@ class Main(BaseSample):
         return
 
     def setup_scene(self):
-        # ROS2 초기화
-        if not rclpy.ok():
-            rclpy.init()
-        self.node = Node("isaac_sim")
+        # ROS2 노드 초기화 필요 없음 - 호스트 시스템과 통신하는 브릿지만 사용
+        carb.log_info("호스트 ROS2 Humble과 통신을 시작합니다")
         
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [environment] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         asset_path = PACKAGE_PATH + "/model/moon_surface/MoonSurface_v1128.usdc"
         add_reference_to_stage(usd_path=asset_path, prim_path="/World/Moon")
 
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [robot] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-        usd_path = "/isaac-sim/isaac_sim/model/rover/ROVER_v1211_colored.usd"
+        usd_path = PACKAGE_PATH + "/model/rover/ROVER_v1211_colored.usd"
         add_reference_to_stage(usd_path=usd_path, prim_path="/World/Robot")
 
         # robot prim
@@ -106,9 +96,6 @@ class Main(BaseSample):
         return
 
     def world_cleanup(self):
-        # ROS2 노드 종료
-        if hasattr(self, 'node'):
-            self.node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        # ROS2 브릿지 정리 작업
+        carb.log_info("ROS2 브릿지 연결 종료")
         return

@@ -19,18 +19,17 @@ from isaacsim.asset.importer.urdf import _urdf
 from pxr import Gf, UsdGeom
 
 # enable ROS 
-enable_extension("isaacsim.ros1.bridge")
+try:
+    enable_extension("isaacsim.ros2.bridge")
+    if "simulation_app" in globals():
+        simulation_app.update()
+except Exception as e:
+    carb.log_warn(f"Failed to enable ROS2 bridge: {e}")
 simulation_app.update()
 
-# ROS
-import rosgraph
 
-if not rosgraph.is_master_online():
-    carb.log_error("Please run roscore before executing this script")
-    simulation_app.close()
-    exit()
 
-import rospy
+import rclpy
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Twist
 
@@ -146,7 +145,7 @@ class Armstrong_runner(object):
             exit()
 
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [subscriber] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-        rospy.Subscriber("/cmd_vel", Twist, self.cmd_vel_cb)
+        rclpy.Subscriber("/cmd_vel", Twist, self.cmd_vel_cb)
         self.desired_vel = [0.0, 0.0, 0.0]
         self.yaw = 0
 
@@ -206,8 +205,8 @@ class Armstrong_runner(object):
         return
 
 def main() -> None:
-    rospy.init_node("armstrong_standalone", anonymous=False, disable_signals=True, log_level=rospy.ERROR)
-    rospy.set_param("use_sim_time", True)
+    rclpy.init_node("armstrong_standalone", anonymous=False, disable_signals=True, log_level=rclpy.ERROR)
+    rclpy.set_param("use_sim_time", True)
     physics_downtime = 1 / 400.0
     runner = Armstrong_runner(physics_dt=physics_downtime, render_dt=16 * physics_downtime)
 
@@ -218,7 +217,7 @@ def main() -> None:
     runner._world.reset()
     runner._world.reset()
     runner.run()
-    rospy.signal_shutdown("armstrong complete")
+    rclpy.signal_shutdown("armstrong complete")
     simulation_app.close()
 
 if __name__ == "__main__":

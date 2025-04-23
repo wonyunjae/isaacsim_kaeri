@@ -1,47 +1,47 @@
 # python package
 import os
 import sys
-# 직접 지정해줘야 함.
-PACKAGE_PATH = os.environ["PACKAGE_PATH"] = "/isaac-sim/isaac_sim"
-sys.path.append("/isaac-sim")
-
 import carb
 import numpy as np
-import omni.appwindow  # Contains handle to keyboard
-import omni.graph.core as og
-from isaacsim.core.api.world import World
-from isaacsim.core.utils.extensions import enable_extension
-from isaacsim.core.utils.prims import create_prim
-from isaacsim.core.utils.stage import add_reference_to_stage
-from isaacsim.core.utils.extensions import get_extension_path_from_name
-from isaacsim.asset.importer.urdf import _urdf
-from isaacsim.core.api.robots import Robot
-
-from pxr import Gf, UsdGeom
-
-# enable ROS bridge extension
-enable_extension("isaacsim.ros1.bridge")
-enable_extension("omni.kaeri.ros_bridge")
-
-# ROS
-import rosgraph
-
-if not rosgraph.is_master_online():
-    carb.log_error("Please run roscore before executing this script")
-    # simulation_app.close()
-    exit()
-
-import rospy
-# from std_msgs.msg import Float32MultiArray
-from geometry_msgs.msg import Twist
 import yaml
-
-# custom scripts
-import numpy as np
-
-from isaac_sim.example.kaeri.isaac.armstrong.ros_publisher import *
-
+from isaacsim.core.utils.extensions import enable_extension
+from rclpy.parameter import Parameter
+# Import other dependencies that should be available
 from Kaeri_Test_python.kaeri_base_sample import BaseSample
+# Use ROS2 publishers instead of ROS1
+from Kaeri_Test_python.ros2_publishers.ros2_publisher_armstrong import *
+
+# 직접 지정해줘야 함.
+PACKAGE_PATH = os.environ["PACKAGE_PATH"] = "/home/smarthc/isaacsim/isaac_sim"
+# sys.path.append("/isaac-sim")
+sys.path.append("/home/smarthc/isaacsim/exts/isaacsim.ros2.bridge/humble")
+
+
+# ROS1 브릿지 로드 방지를 위한 환경 변수 설정
+os.environ["LD_LIBRARY_PATH"] = os.environ.get("LD_LIBRARY_PATH", "") + ":/home/smarthc/isaacsim/exts/isaacsim.ros2.bridge/humble/lib"
+os.environ["DISABLE_ROS1_BRIDGE"] = "1"
+os.environ["ROS_DISTRO"] = "humble"
+os.environ["ENABLE_ROS2_BRIDGE"] = "1"
+os.environ["RMW_IMPLEMENTATION"] = "rmw_cyclonedds_cpp"
+
+# Try to enable ROS2 bridge
+try:
+    enable_extension("isaacsim.ros2.bridge")
+    if "simulation_app" in globals():
+        simulation_app.update()
+except Exception as e:
+    carb.log_warn(f"Failed to enable ROS2 bridge: {e}")
+
+# Try to import ROS2 packages, but provide fallbacks
+ROS2_AVAILABLE = False
+try:
+    import rclpy
+    from rclpy.node import Node
+    ROS2_AVAILABLE = True
+    from geometry_msgs.msg import Twist
+except Exception as e:
+    carb.log_warn(f"Failed to enable ROS2 bridge: {e}")
+
 
 class Main(BaseSample):
     def __init__(self) -> None:
@@ -67,11 +67,16 @@ class Main(BaseSample):
         return
 
     def setup_scene(self):
-        if not rospy.core.is_initialized():
-            rospy.init_node("isaac", anonymous=False, disable_signals=True, log_level=rospy.ERROR)
-        rospy.set_param("use_sim_time", True)
-        # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [subscriber] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-        rospy.Subscriber("/cmd_vel", Twist, self.cmd_vel_cb)
+        if ROS2_AVAILABLE:
+            rclpy.init(args=None)
+            self.node = rclpy.create_node("isaac")
+            self.node.declare_parameter("use_sim_time", True)
+            self.subscription = self.node.create_subscription(Twist, "/cmd_vel", self.cmd_vel_cb, 10)
+        else:
+            if not rclpy.core.is_initialized():
+                rclpy.init_node("isaac", anonymous=False, disable_signals=True, log_level=rclpy.ERROR)
+            node.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
+            rclpy.Subscriber("/cmd_vel", Twist, self.cmd_vel_cb)
 
         # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= [world] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         self._world = self.get_world()

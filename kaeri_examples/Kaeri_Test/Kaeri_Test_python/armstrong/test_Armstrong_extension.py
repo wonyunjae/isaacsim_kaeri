@@ -1,10 +1,10 @@
 import asyncio
 import os
 
-import omni.ui as ui
+import isaacsim.gui.components as ui
 from Kaeri_Test_python.kaeri_base_sample import BaseSampleExtension
 from Kaeri_Test_python.armstrong.test_Armstrong import Main
-from omni.isaac.ui.ui_utils import btn_builder
+from isaacsim.gui.components import btn_builder
 
 class MainExtension(BaseSampleExtension):
     def on_startup(self, ext_id: str):
